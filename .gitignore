@@ -1,0 +1,8 @@
+# Игнорируемые файлы
+.DS_Store
+*.log
+node_modules/
+*.zip
+*.crx
+*.pem
+

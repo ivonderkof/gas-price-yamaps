@@ -1,0 +1,123 @@
+/* Стили для расширения Yandex Maps Fuel Cost Calculator */
+
+.fuel-cost-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background-color: #FF7732;
+  color: white;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  width: fit-content;
+  min-width: fit-content;
+  max-width: none;
+  height: auto;
+}
+
+.fuel-cost-icon {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.fuel-cost-text {
+  font-weight: 500;
+}
+
+.route-distance-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#fuel-cost-settings {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Панель настроек */
+.fuel-cost-settings {
+  position: fixed;
+  top: 150px;
+  right: 20px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 2147483646;
+  min-width: 280px;
+  max-width: 320px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: none;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Кнопка настроек */
+.fuel-settings-button {
+  position: fixed;
+  top: 100px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  background: #ff6b35;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 22px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  z-index: 2147483645;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.fuel-settings-button:hover {
+  background: #e55a2b !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transform: scale(1.1);
+}
+
+.fuel-settings-button:active {
+  background: #cc4f24 !important;
+}
+
+.fuel-settings-button:focus {
+  outline: 2px solid #ff6b35;
+  outline-offset: 2px;
+}
+
+#fuel-cost-settings input[type="number"]:focus {
+  outline: none;
+  border-color: #ff6b35;
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
+}
+
+#fuel-settings-apply:hover {
+  background: #e55a2b !important;
+}
+
+#fuel-settings-apply:active {
+  background: #cc4f24 !important;
+}
+
+#fuel-settings-button:hover {
+  background: #e55a2b !important;
+}
+
+#fuel-settings-button:active {
+  background: #cc4f24 !important;
+}
+
