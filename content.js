@@ -30,6 +30,7 @@
   let isUpdating = false;
   let clickOutsideHandlerAttached = false;
   let pendingRouteCards = new Set();
+  let lastMissingAnchorUrl = null;
 
   // Константы селекторов и таймаутов
   const DOM_RULES = {
@@ -386,13 +387,28 @@
     const button = document.getElementById(SETTINGS_BUTTON_ID);
     if (!button) return;
 
-    const anchorRect = getVisibleAnchorRect(findSettingsButtonAnchor());
+    const anchor = findSettingsButtonAnchor();
+    const anchorRect = getVisibleAnchorRect(anchor);
+
+    if (!anchorRect && lastMissingAnchorUrl !== location.href) {
+      lastMissingAnchorUrl = location.href;
+      debugDom('settings-anchor-missing', {
+        selector: SIDEBAR_TOGGLE_ANCHOR_SELECTOR,
+        url: location.href,
+      });
+    }
+
+    if (anchorRect) {
+      lastMissingAnchorUrl = null;
+    }
+
     const position = resolveSettingsButtonPosition(
       anchorRect,
       SETTINGS_BUTTON_FALLBACK_RECT,
       { buttonSize: SETTINGS_BUTTON_SIZE, gap: SETTINGS_BUTTON_GAP }
     );
 
+    debugDom('settings-button-positioned', position);
     button.classList.toggle('_anchored', position.mode === 'anchored');
     button.style.top = `${position.top}px`;
 
