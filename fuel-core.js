@@ -4,13 +4,18 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  function normalizeUiText(text) {
+    return String(text || '')
+      .replace(/\u202F/g, ' ')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function extractDistanceKm(text) {
     if (!text) return null;
 
-    const cleaned = text
-      .replace(/\u202F/g, ' ')
-      .replace(/\u00A0/g, ' ')
-      .trim();
+    const cleaned = normalizeUiText(text);
 
     const kmMatch = cleaned.match(/(\d[\d\s.,]*)\s*км/i);
     if (kmMatch) {
@@ -29,6 +34,21 @@
     return null;
   }
 
+  function isPureDistanceText(text) {
+    const normalized = normalizeUiText(text);
+    return /^(\d[\d\s.,]*)\s*(км|м)$/i.test(normalized);
+  }
+
+  function scoreDistanceCandidateText(text) {
+    const normalized = normalizeUiText(text);
+    const distance = extractDistanceKm(normalized);
+
+    if (distance === null) return -1;
+    if (isPureDistanceText(normalized)) return 1000 + distance;
+
+    return distance;
+  }
+
   function calculateFuelCost(distanceKm, fuelPrice, fuelConsumption) {
     if (!Number.isFinite(distanceKm) || distanceKm < 0) return null;
     if (!Number.isFinite(fuelPrice) || fuelPrice < 0) return null;
@@ -41,7 +61,15 @@
     return `~${cost.toLocaleString('ru-RU')} ₽`;
   }
 
-  const api = { normalizeStoredNumber, extractDistanceKm, calculateFuelCost, formatCost };
+  const api = {
+    normalizeStoredNumber,
+    extractDistanceKm,
+    calculateFuelCost,
+    formatCost,
+    normalizeUiText,
+    isPureDistanceText,
+    scoreDistanceCandidateText,
+  };
   root.FuelCalcCore = api;
 
   if (typeof module !== 'undefined' && module.exports) {
