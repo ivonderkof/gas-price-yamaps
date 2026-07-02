@@ -21,8 +21,10 @@
   let observer = null;
   let spaObserver = null;
   let updateTimeout = null;
+  let routeUpdateTimeout = null;
   let isUpdating = false;
   let clickOutsideHandlerAttached = false;
+  let pendingRouteCards = new Set();
 
   // Константы селекторов и таймаутов
   const ROUTE_DISTANCE_SELECTOR = '.auto-route-snippet-view .auto-route-snippet-view__distance';
@@ -168,6 +170,15 @@
     }
   }
 
+  function clearRouteCardCost(routeCard) {
+    routeCard.querySelectorAll('.fuel-cost-display').forEach((el) => el.remove());
+  }
+
+  function updateRouteCard(routeCard) {
+    clearRouteCardCost(routeCard);
+    addFuelCostToRoute(routeCard);
+  }
+
   // Обновление всех маршрутов
   function updateAllRoutes() {
     // Защита от множественных одновременных обновлений
@@ -211,6 +222,26 @@
     }
     updateTimeout = setTimeout(() => {
       updateAllRoutes();
+    }, delay);
+  }
+
+  function scheduleRouteUpdate(routeCards, delay = DEBOUNCE_MS) {
+    for (const routeCard of routeCards) {
+      pendingRouteCards.add(routeCard);
+    }
+
+    if (routeUpdateTimeout) {
+      clearTimeout(routeUpdateTimeout);
+    }
+
+    routeUpdateTimeout = setTimeout(() => {
+      const cards = Array.from(pendingRouteCards).filter((card) => card.isConnected);
+      pendingRouteCards.clear();
+      routeUpdateTimeout = null;
+
+      if (cards.length === 0) return;
+
+      cards.forEach((card) => updateRouteCard(card));
     }, delay);
   }
 
@@ -342,6 +373,11 @@
       clearTimeout(updateTimeout);
       updateTimeout = null;
     }
+    if (routeUpdateTimeout) {
+      clearTimeout(routeUpdateTimeout);
+      routeUpdateTimeout = null;
+    }
+    pendingRouteCards.clear();
   }
 
   // Находим корневой контейнер списка маршрутов, чтобы сузить наблюдение
@@ -412,30 +448,35 @@
 
     // Наблюдаем за изменениями DOM
     observer = new MutationObserver((mutations) => {
-      let shouldUpdate = false;
-      mutations.forEach((mutation) => {
-        if (mutation.addedNodes.length > 0) {
-          // Проверяем, не добавляем ли мы сами элементы расширения
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // Пропускаем наши собственные элементы
-              if (node.id === SETTINGS_PANEL_ID || 
-                  node.id === SETTINGS_BUTTON_ID ||
-                  node.classList?.contains('fuel-cost-display')) {
-                continue;
-              }
-              shouldUpdate = true;
-              break;
-            }
+      const routeCardsToRefresh = new Set();
+
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (node.id === SETTINGS_PANEL_ID || node.id === SETTINGS_BUTTON_ID) continue;
+          if (node.classList?.contains('fuel-cost-display')) continue;
+
+          if (node.matches?.(ROUTE_CARD_SELECTOR)) {
+            routeCardsToRefresh.add(node);
+          }
+
+          node.querySelectorAll?.(ROUTE_CARD_SELECTOR).forEach((card) => {
+            routeCardsToRefresh.add(card);
+          });
+
+          const parentRouteCard = node.closest?.(ROUTE_CARD_SELECTOR);
+          if (parentRouteCard) {
+            routeCardsToRefresh.add(parentRouteCard);
           }
         }
-      });
-      if (shouldUpdate) {
-        scheduleUpdate(DEBOUNCE_MS);
-        // Убеждаемся, что кнопка создана
-        if (!document.getElementById(SETTINGS_BUTTON_ID)) {
-          createSettingsButton();
-        }
+      }
+
+      if (routeCardsToRefresh.size > 0) {
+        scheduleRouteUpdate(routeCardsToRefresh, DEBOUNCE_MS);
+      }
+
+      if (!document.getElementById(SETTINGS_BUTTON_ID)) {
+        createSettingsButton();
       }
     });
 
@@ -473,16 +514,16 @@
     const url = location.href;
     if (url !== lastUrl) {
       lastUrl = url;
-      // Удаляем старые элементы при навигации
       document.querySelectorAll('.fuel-cost-display').forEach(el => el.remove());
       scheduleUpdate(INITIAL_UPDATE_DELAY_MS);
-      // Убеждаемся, что кнопка и панель созданы
+
       if (!document.getElementById(SETTINGS_BUTTON_ID)) {
         createSettingsButton();
       }
       if (!document.getElementById(SETTINGS_PANEL_ID)) {
         createSettingsPanel();
       }
+      attachRouteInputListeners();
     }
   });
   spaObserver.observe(document, { subtree: true, childList: true });
