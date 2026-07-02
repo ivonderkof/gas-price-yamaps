@@ -9,6 +9,7 @@ const {
   normalizeUiText,
   scoreDistanceCandidateText,
   isPureDistanceText,
+  resolveSettingsButtonPosition,
 } = require('../fuel-core.js');
 
 test('normalizeStoredNumber keeps explicit zero values', () => {
@@ -53,4 +54,33 @@ test('scoreDistanceCandidateText prefers pure distance labels and rejects noise'
   assert.ok(scoreDistanceCandidateText('9,5 км') > scoreDistanceCandidateText('Маршрут 9,5 км, 25 мин'));
   assert.ok(scoreDistanceCandidateText('850 м') > scoreDistanceCandidateText('Через 850 м поверните направо'));
   assert.equal(scoreDistanceCandidateText('Настройки расчёта топлива'), -1);
+});
+
+test('resolveSettingsButtonPosition anchors next to the sidebar toggle', () => {
+  assert.deepEqual(
+    resolveSettingsButtonPosition(
+      { left: 428, top: 16, width: 24, height: 32 },
+      { top: 100, right: 20 },
+      { buttonSize: 44, gap: 8 }
+    ),
+    { mode: 'anchored', top: 10, left: 460 }
+  );
+});
+
+test('resolveSettingsButtonPosition falls back when anchor is missing', () => {
+  assert.deepEqual(
+    resolveSettingsButtonPosition(null, { top: 100, right: 20 }, { buttonSize: 44, gap: 8 }),
+    { mode: 'fallback', top: 100, right: 20 }
+  );
+});
+
+test('resolveSettingsButtonPosition falls back when anchor rect is zero-sized', () => {
+  assert.deepEqual(
+    resolveSettingsButtonPosition(
+      { left: 428, top: 16, width: 0, height: 0 },
+      { top: 100, right: 20 },
+      { buttonSize: 44, gap: 8 }
+    ),
+    { mode: 'fallback', top: 100, right: 20 }
+  );
 });

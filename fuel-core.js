@@ -61,6 +61,33 @@
     return `~${cost.toLocaleString('ru-RU')} ₽`;
   }
 
+  function resolveSettingsButtonPosition(anchorRect, fallbackRect, options = {}) {
+    const buttonSize = Number.isFinite(options.buttonSize) ? options.buttonSize : 44;
+    const gap = Number.isFinite(options.gap) ? options.gap : 8;
+
+    const hasVisibleAnchor = Boolean(
+      anchorRect
+      && Number.isFinite(anchorRect.left)
+      && Number.isFinite(anchorRect.top)
+      && anchorRect.width > 0
+      && anchorRect.height > 0
+    );
+
+    if (!hasVisibleAnchor) {
+      return {
+        mode: 'fallback',
+        top: fallbackRect.top,
+        right: fallbackRect.right,
+      };
+    }
+
+    return {
+      mode: 'anchored',
+      top: Math.round(anchorRect.top + ((anchorRect.height - buttonSize) / 2)),
+      left: Math.round(anchorRect.left + anchorRect.width + gap),
+    };
+  }
+
   const api = {
     normalizeStoredNumber,
     extractDistanceKm,
@@ -69,6 +96,7 @@
     normalizeUiText,
     isPureDistanceText,
     scoreDistanceCandidateText,
+    resolveSettingsButtonPosition,
   };
   root.FuelCalcCore = api;
 
