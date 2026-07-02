@@ -1,0 +1,7 @@
+{
+  "name": "chrome_gas_ext",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

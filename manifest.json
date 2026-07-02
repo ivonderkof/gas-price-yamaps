@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Yandex Maps Fuel Cost Calculator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Показывает стоимость бензина для маршрутов на Яндекс Карте",
   "permissions": [
     "storage"
@@ -12,7 +12,7 @@
   "content_scripts": [
     {
       "matches": ["https://yandex.ru/maps/*"],
-      "js": ["content.js"],
+      "js": ["fuel-core.js", "content.js"],
       "css": ["styles.css"]
     }
   ],

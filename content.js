@@ -3,6 +3,13 @@
 (function() {
   'use strict';
 
+  const {
+    normalizeStoredNumber,
+    extractDistanceKm,
+    calculateFuelCost,
+    formatCost,
+  } = globalThis.FuelCalcCore;
+
   // Настройки по умолчанию
   const DEFAULT_FUEL_PRICE = 50; // руб/литр
   const DEFAULT_FUEL_CONSUMPTION = 8; // литров на 100 км
@@ -14,15 +21,16 @@
   let observer = null;
   let spaObserver = null;
   let updateTimeout = null;
+  let routeUpdateTimeout = null;
   let isUpdating = false;
   let clickOutsideHandlerAttached = false;
+  let pendingRouteCards = new Set();
 
   // Константы селекторов и таймаутов
   const ROUTE_DISTANCE_SELECTOR = '.auto-route-snippet-view .auto-route-snippet-view__distance';
   const ROUTE_CARD_SELECTOR = '.auto-route-snippet-view';
   const SETTINGS_PANEL_ID = 'fuel-cost-settings';
   const SETTINGS_BUTTON_ID = 'fuel-settings-button';
-  const SCALE_EXCLUDE_SELECTORS = '.map-scale-line, .map-copyrights__scale-line, [data-chunk="scale-line"], .map-controls, .zoom-control';
   const ROUTE_INPUT_KEYWORDS = ['откуда', 'куда'];
   const BUILD_ROUTE_TEXT = 'построить маршрут';
 
@@ -34,12 +42,8 @@
   async function loadSettings() {
     try {
       const result = await chrome.storage.local.get(['fuelPrice', 'fuelConsumption']);
-      if (result.fuelPrice !== undefined) {
-        fuelPrice = parseFloat(result.fuelPrice) || DEFAULT_FUEL_PRICE;
-      }
-      if (result.fuelConsumption !== undefined) {
-        fuelConsumption = parseFloat(result.fuelConsumption) || DEFAULT_FUEL_CONSUMPTION;
-      }
+      fuelPrice = normalizeStoredNumber(result.fuelPrice, DEFAULT_FUEL_PRICE);
+      fuelConsumption = normalizeStoredNumber(result.fuelConsumption, DEFAULT_FUEL_CONSUMPTION);
     } catch (error) {
       console.error('Ошибка загрузки настроек:', error);
     }
@@ -60,38 +64,6 @@
     }
   }
 
-  // Извлечение расстояния из текста (например, "9 100 км" или "9 100 км" -> 9100)
-  function extractDistance(text) {
-    if (!text) return null;
-    // Нормализуем тонкие/неразрывные пробелы и убираем все пробелы внутри числа
-    const cleaned = text
-      .replace(/\u202F/g, ' ')  // тонкий пробел
-      .replace(/\u00A0/g, ' ')  // неразрывный пробел
-      .trim();
-    const match = cleaned.match(/(\d[\d\s.,]*)\s*км/i);
-    if (match) {
-      const numeric = match[1]
-        .replace(/\s+/g, '')    // убираем любые пробелы
-        .replace(',', '.');     // замена запятой на точку
-      const value = parseFloat(numeric);
-      return Number.isFinite(value) ? value : null;
-    }
-    return null;
-  }
-
-  // Расчет стоимости бензина
-  function calculateFuelCost(distanceKm) {
-    if (!distanceKm || distanceKm <= 0) return null;
-    const liters = (distanceKm * fuelConsumption) / 100;
-    const cost = liters * fuelPrice;
-    return Math.round(cost);
-  }
-
-  // Форматирование стоимости
-  function formatCost(cost) {
-    return `~${cost.toLocaleString('ru-RU')} ₽`;
-  }
-
   // Поиск элемента с расстоянием в карточке маршрута
   function findDistanceElement(routeCard) {
     // Ищем текст с расстоянием (обычно это элемент с классом или текстом "км")
@@ -101,21 +73,15 @@
     let bestMatchDistance = 0;
     
     for (const el of textElements) {
-      const text = el.textContent || '';
-      if (text.includes('км')) {
-        const distance = extractDistance(text);
-        if (distance !== null && distance > bestMatchDistance) {
-          // Предпочитаем элементы, которые содержат только расстояние или минимальный текст
-          const cleanText = text.trim();
-          // Если текст содержит только число и "км" (возможно с пробелами), это хороший кандидат
-          if (cleanText.match(/^\d+[.,]?\d*\s*км$/)) {
-            bestMatch = el;
-            bestMatchDistance = distance;
-          } else if (!bestMatch) {
-            // Если не нашли идеальный вариант, берем первый подходящий
-            bestMatch = el;
-            bestMatchDistance = distance;
-          }
+      const distance = extractDistanceKm(el.textContent || '');
+      if (distance !== null && distance > bestMatchDistance) {
+        const cleanText = (el.textContent || '').trim();
+        if (cleanText.match(/^\d[\d\s.,]*\s*(км|м)$/i)) {
+          bestMatch = el;
+          bestMatchDistance = distance;
+        } else if (!bestMatch) {
+          bestMatch = el;
+          bestMatchDistance = distance;
         }
       }
     }
@@ -167,11 +133,11 @@
     if (!distanceEl) return;
 
     const distanceText = distanceEl.textContent || '';
-    const distance = extractDistance(distanceText);
-    if (!distance) return;
+    const distance = extractDistanceKm(distanceText);
+    if (distance === null) return;
 
-    const cost = calculateFuelCost(distance);
-    if (!cost) return;
+    const cost = calculateFuelCost(distance, fuelPrice, fuelConsumption);
+    if (cost === null) return;
 
     // Создаем элемент для отображения стоимости (в стиле платных дорог)
     const costElement = document.createElement('div');
@@ -185,26 +151,6 @@
     costElement.innerHTML = `
       <span class="fuel-cost-icon">⛽</span>
       <span class="fuel-cost-text">${formatCost(cost)}</span>
-    `;
-    
-    costElement.style.cssText = `
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      margin-left: 8px;
-      padding: 2px 8px;
-      background-color: #FF7732;
-      color: white;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 500;
-      line-height: 1.2;
-      white-space: nowrap;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      width: fit-content;
-      min-width: fit-content;
-      max-width: none;
-      height: auto;
     `;
 
     // Вставляем стоимость рядом с расстоянием (в той же строке)
@@ -222,6 +168,15 @@
       // Fallback: вставляем после элемента
       distanceEl.parentNode.insertBefore(costElement, distanceEl.nextSibling);
     }
+  }
+
+  function clearRouteCardCost(routeCard) {
+    routeCard.querySelectorAll('.fuel-cost-display').forEach((el) => el.remove());
+  }
+
+  function updateRouteCard(routeCard) {
+    clearRouteCardCost(routeCard);
+    addFuelCostToRoute(routeCard);
   }
 
   // Обновление всех маршрутов
@@ -245,7 +200,7 @@
       
       distanceElements.forEach(distanceEl => {
         const text = distanceEl.textContent || '';
-        const distance = extractDistance(text);
+        const distance = extractDistanceKm(text);
         if (distance !== null) {
           // Находим родительскую карточку маршрута
           const routeCard = distanceEl.closest(ROUTE_CARD_SELECTOR);
@@ -270,6 +225,26 @@
     }, delay);
   }
 
+  function scheduleRouteUpdate(routeCards, delay = DEBOUNCE_MS) {
+    for (const routeCard of routeCards) {
+      pendingRouteCards.add(routeCard);
+    }
+
+    if (routeUpdateTimeout) {
+      clearTimeout(routeUpdateTimeout);
+    }
+
+    routeUpdateTimeout = setTimeout(() => {
+      const cards = Array.from(pendingRouteCards).filter((card) => card.isConnected);
+      pendingRouteCards.clear();
+      routeUpdateTimeout = null;
+
+      if (cards.length === 0) return;
+
+      cards.forEach((card) => updateRouteCard(card));
+    }, delay);
+  }
+
   // Создание панели настроек
   function createSettingsPanel() {
     if (settingsPanel) return settingsPanel;
@@ -282,37 +257,17 @@
     panel.setAttribute('data-non-ad', 'true');
 
     panel.innerHTML = `
-      <div style="margin-bottom: 12px; font-weight: 600; font-size: 14px; color: #333;">
-        Настройки расчёта топлива
+      <div class="fuel-cost-title">Настройки расчёта топлива</div>
+      <div class="fuel-cost-field">
+        <label for="fuel-price-input">Цена топлива (₽/литр):</label>
+        <input type="number" id="fuel-price-input" value="${fuelPrice}" min="0" step="0.1">
       </div>
-      <div style="margin-bottom: 12px;">
-        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;">
-          Цена топлива (₽/литр):
-        </label>
-        <input type="number" id="fuel-price-input" 
-               value="${fuelPrice}" 
-               min="0" 
-               step="0.1"
-               style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+      <div class="fuel-cost-field">
+        <label for="fuel-consumption-input">Расход топлива (л/100км):</label>
+        <input type="number" id="fuel-consumption-input" value="${fuelConsumption}" min="0" step="0.1">
       </div>
-      <div style="margin-bottom: 12px;">
-        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;">
-          Расход топлива (л/100км):
-        </label>
-        <input type="number" id="fuel-consumption-input" 
-               value="${fuelConsumption}" 
-               min="0" 
-               step="0.1"
-               style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
-      </div>
-      <button id="fuel-settings-apply" 
-              style="width: 100%; padding: 8px; background: #ff6b35; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
-        Применить
-      </button>
-      <button id="fuel-settings-toggle" 
-              style="position: absolute; top: 8px; right: 8px; background: none; border: none; cursor: pointer; font-size: 18px; color: #999; padding: 4px 8px;">
-        ×
-      </button>
+      <button id="fuel-settings-apply" class="fuel-cost-apply">Применить</button>
+      <button id="fuel-settings-toggle" class="fuel-cost-close" aria-label="Закрыть">×</button>
     `;
 
     document.body.appendChild(panel);
@@ -388,25 +343,6 @@
     button.title = 'Настройки расчёта топлива';
     button.setAttribute('aria-label', 'Настройки расчёта топлива');
 
-    button.addEventListener('mouseenter', () => {
-      button.style.transform = 'scale(1.1)';
-      button.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-    });
-
-    button.addEventListener('mouseleave', () => {
-      button.style.transform = 'scale(1)';
-      button.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
-    });
-    
-    button.addEventListener('focus', () => {
-      button.style.outline = '2px solid #ff6b35';
-      button.style.outlineOffset = '2px';
-    });
-    
-    button.addEventListener('blur', () => {
-      button.style.outline = 'none';
-    });
-
     button.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -437,6 +373,11 @@
       clearTimeout(updateTimeout);
       updateTimeout = null;
     }
+    if (routeUpdateTimeout) {
+      clearTimeout(routeUpdateTimeout);
+      routeUpdateTimeout = null;
+    }
+    pendingRouteCards.clear();
   }
 
   // Находим корневой контейнер списка маршрутов, чтобы сузить наблюдение
@@ -507,30 +448,35 @@
 
     // Наблюдаем за изменениями DOM
     observer = new MutationObserver((mutations) => {
-      let shouldUpdate = false;
-      mutations.forEach((mutation) => {
-        if (mutation.addedNodes.length > 0) {
-          // Проверяем, не добавляем ли мы сами элементы расширения
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // Пропускаем наши собственные элементы
-              if (node.id === SETTINGS_PANEL_ID || 
-                  node.id === SETTINGS_BUTTON_ID ||
-                  node.classList?.contains('fuel-cost-display')) {
-                continue;
-              }
-              shouldUpdate = true;
-              break;
-            }
+      const routeCardsToRefresh = new Set();
+
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (node.id === SETTINGS_PANEL_ID || node.id === SETTINGS_BUTTON_ID) continue;
+          if (node.classList?.contains('fuel-cost-display')) continue;
+
+          if (node.matches?.(ROUTE_CARD_SELECTOR)) {
+            routeCardsToRefresh.add(node);
+          }
+
+          node.querySelectorAll?.(ROUTE_CARD_SELECTOR).forEach((card) => {
+            routeCardsToRefresh.add(card);
+          });
+
+          const parentRouteCard = node.closest?.(ROUTE_CARD_SELECTOR);
+          if (parentRouteCard) {
+            routeCardsToRefresh.add(parentRouteCard);
           }
         }
-      });
-      if (shouldUpdate) {
-        scheduleUpdate(DEBOUNCE_MS);
-        // Убеждаемся, что кнопка создана
-        if (!document.getElementById(SETTINGS_BUTTON_ID)) {
-          createSettingsButton();
-        }
+      }
+
+      if (routeCardsToRefresh.size > 0) {
+        scheduleRouteUpdate(routeCardsToRefresh, DEBOUNCE_MS);
+      }
+
+      if (!document.getElementById(SETTINGS_BUTTON_ID)) {
+        createSettingsButton();
       }
     });
 
@@ -568,16 +514,16 @@
     const url = location.href;
     if (url !== lastUrl) {
       lastUrl = url;
-      // Удаляем старые элементы при навигации
       document.querySelectorAll('.fuel-cost-display').forEach(el => el.remove());
       scheduleUpdate(INITIAL_UPDATE_DELAY_MS);
-      // Убеждаемся, что кнопка и панель созданы
+
       if (!document.getElementById(SETTINGS_BUTTON_ID)) {
         createSettingsButton();
       }
       if (!document.getElementById(SETTINGS_PANEL_ID)) {
         createSettingsPanel();
       }
+      attachRouteInputListeners();
     }
   });
   spaObserver.observe(document, { subtree: true, childList: true });
