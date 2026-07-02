@@ -32,7 +32,7 @@
   // Константы селекторов и таймаутов
   const DOM_RULES = {
     routeCardExact: ['.auto-route-snippet-view'],
-    routeCardFallback: ['[class*="route-snippet"]', '[class*="snippet-view"]'],
+    routeCardFallback: ['[class*="route-snippet"]', '[class*="auto-route"]'],
     routeDistanceExact: ['.auto-route-snippet-view__distance'],
     routeDistanceFallback: ['[class*="distance"]', '[aria-label*="км"]', '[aria-label*="м"]'],
     detailedRouteContainers: [
@@ -111,11 +111,10 @@
     const routeText = getRouteLikeText(node);
     if (extractDistanceKm(routeText) === null) return false;
 
-    if (node.matches?.('[class*="route-snippet"]') || node.closest?.('[class*="route-snippet"]')) {
-      return true;
-    }
-
-    return routeText.includes('мин') || routeText.includes('ч');
+    return Boolean(
+      node.matches?.(DOM_RULES.routeCardFallback.join(','))
+      || node.closest?.(DOM_RULES.routeCardFallback.join(','))
+    );
   }
 
   function isDetailedRouteCard(routeCard) {
