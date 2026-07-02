@@ -490,9 +490,9 @@
     // Закрытие при клике вне панели (вешаем один раз)
     if (!clickOutsideHandlerAttached) {
       document.addEventListener('click', (e) => {
-        if (panel && panel.style.display === 'block') {
-          if (!panel.contains(e.target) && e.target.id !== SETTINGS_BUTTON_ID) {
-            panel.style.display = 'none';
+        if (settingsPanel && settingsPanel.style.display === 'block') {
+          if (!settingsPanel.contains(e.target) && e.target.id !== SETTINGS_BUTTON_ID) {
+            settingsPanel.style.display = 'none';
           }
         }
       });
@@ -569,12 +569,6 @@
       buttonPositionTimeout = null;
     }
     pendingRouteCards.clear();
-  }
-
-  // Находим корневой контейнер списка маршрутов, чтобы сузить наблюдение
-  function getRoutePanelRoot() {
-    const [routeCard] = findRouteCards();
-    return routeCard?.parentElement || null;
   }
 
   // Доп. триггер обновления при изменении полей адреса или клике на "Построить маршрут"
@@ -703,9 +697,7 @@
       }
     });
 
-    // Начинаем наблюдение — приоритетно на контейнере маршрутов
-    const routeRoot = getRoutePanelRoot();
-    routeObserver.observe(routeRoot || document.body, {
+    routeObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
