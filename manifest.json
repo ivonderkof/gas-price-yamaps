@@ -12,7 +12,7 @@
   "content_scripts": [
     {
       "matches": ["https://yandex.ru/maps/*"],
-      "js": ["content.js"],
+      "js": ["fuel-core.js", "content.js"],
       "css": ["styles.css"]
     }
   ],

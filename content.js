@@ -3,6 +3,13 @@
 (function() {
   'use strict';
 
+  const {
+    normalizeStoredNumber,
+    extractDistanceKm,
+    calculateFuelCost,
+    formatCost,
+  } = globalThis.FuelCalcCore;
+
   // Настройки по умолчанию
   const DEFAULT_FUEL_PRICE = 50; // руб/литр
   const DEFAULT_FUEL_CONSUMPTION = 8; // литров на 100 км
@@ -34,12 +41,8 @@
   async function loadSettings() {
     try {
       const result = await chrome.storage.local.get(['fuelPrice', 'fuelConsumption']);
-      if (result.fuelPrice !== undefined) {
-        fuelPrice = parseFloat(result.fuelPrice) || DEFAULT_FUEL_PRICE;
-      }
-      if (result.fuelConsumption !== undefined) {
-        fuelConsumption = parseFloat(result.fuelConsumption) || DEFAULT_FUEL_CONSUMPTION;
-      }
+      fuelPrice = normalizeStoredNumber(result.fuelPrice, DEFAULT_FUEL_PRICE);
+      fuelConsumption = normalizeStoredNumber(result.fuelConsumption, DEFAULT_FUEL_CONSUMPTION);
     } catch (error) {
       console.error('Ошибка загрузки настроек:', error);
     }
@@ -60,38 +63,6 @@
     }
   }
 
-  // Извлечение расстояния из текста (например, "9 100 км" или "9 100 км" -> 9100)
-  function extractDistance(text) {
-    if (!text) return null;
-    // Нормализуем тонкие/неразрывные пробелы и убираем все пробелы внутри числа
-    const cleaned = text
-      .replace(/\u202F/g, ' ')  // тонкий пробел
-      .replace(/\u00A0/g, ' ')  // неразрывный пробел
-      .trim();
-    const match = cleaned.match(/(\d[\d\s.,]*)\s*км/i);
-    if (match) {
-      const numeric = match[1]
-        .replace(/\s+/g, '')    // убираем любые пробелы
-        .replace(',', '.');     // замена запятой на точку
-      const value = parseFloat(numeric);
-      return Number.isFinite(value) ? value : null;
-    }
-    return null;
-  }
-
-  // Расчет стоимости бензина
-  function calculateFuelCost(distanceKm) {
-    if (!distanceKm || distanceKm <= 0) return null;
-    const liters = (distanceKm * fuelConsumption) / 100;
-    const cost = liters * fuelPrice;
-    return Math.round(cost);
-  }
-
-  // Форматирование стоимости
-  function formatCost(cost) {
-    return `~${cost.toLocaleString('ru-RU')} ₽`;
-  }
-
   // Поиск элемента с расстоянием в карточке маршрута
   function findDistanceElement(routeCard) {
     // Ищем текст с расстоянием (обычно это элемент с классом или текстом "км")
@@ -101,21 +72,15 @@
     let bestMatchDistance = 0;
     
     for (const el of textElements) {
-      const text = el.textContent || '';
-      if (text.includes('км')) {
-        const distance = extractDistance(text);
-        if (distance !== null && distance > bestMatchDistance) {
-          // Предпочитаем элементы, которые содержат только расстояние или минимальный текст
-          const cleanText = text.trim();
-          // Если текст содержит только число и "км" (возможно с пробелами), это хороший кандидат
-          if (cleanText.match(/^\d+[.,]?\d*\s*км$/)) {
-            bestMatch = el;
-            bestMatchDistance = distance;
-          } else if (!bestMatch) {
-            // Если не нашли идеальный вариант, берем первый подходящий
-            bestMatch = el;
-            bestMatchDistance = distance;
-          }
+      const distance = extractDistanceKm(el.textContent || '');
+      if (distance !== null && distance > bestMatchDistance) {
+        const cleanText = (el.textContent || '').trim();
+        if (cleanText.match(/^\d[\d\s.,]*\s*(км|м)$/i)) {
+          bestMatch = el;
+          bestMatchDistance = distance;
+        } else if (!bestMatch) {
+          bestMatch = el;
+          bestMatchDistance = distance;
         }
       }
     }
@@ -167,11 +132,11 @@
     if (!distanceEl) return;
 
     const distanceText = distanceEl.textContent || '';
-    const distance = extractDistance(distanceText);
-    if (!distance) return;
+    const distance = extractDistanceKm(distanceText);
+    if (distance === null) return;
 
-    const cost = calculateFuelCost(distance);
-    if (!cost) return;
+    const cost = calculateFuelCost(distance, fuelPrice, fuelConsumption);
+    if (cost === null) return;
 
     // Создаем элемент для отображения стоимости (в стиле платных дорог)
     const costElement = document.createElement('div');
@@ -245,7 +210,7 @@
       
       distanceElements.forEach(distanceEl => {
         const text = distanceEl.textContent || '';
-        const distance = extractDistance(text);
+        const distance = extractDistanceKm(text);
         if (distance !== null) {
           // Находим родительскую карточку маршрута
           const routeCard = distanceEl.closest(ROUTE_CARD_SELECTOR);
