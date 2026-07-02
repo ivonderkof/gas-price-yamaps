@@ -272,8 +272,15 @@
     
     // Создаем структуру как у платных дорог: иконка + текст
     costElement.innerHTML = `
-      <span class="fuel-cost-icon">⛽</span>
-      <span class="fuel-cost-text">${formatCost(cost)}</span>
+      <span class="fuel-cost-badge">
+        <span class="fuel-cost-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" focusable="false">
+            <path d="M7 3.75a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1h4.4a1 1 0 0 0 1-1v-8.5a1 1 0 0 0-1-1H7Zm.4 1.45h3.8v2.4H7.4V5.2Zm.35 3.55a.65.65 0 0 0-.65.65v2.75c0 .36.29.65.65.65h2.95c.36 0 .65-.29.65-.65V9.4a.65.65 0 0 0-.65-.65H7.75Z" fill="currentColor"/>
+            <path d="M12.85 5h.8c.5 0 .9.4.9.9v2.35c0 .24.1.48.27.65l.42.42c.5.49.76 1.15.76 1.84v2.02a.9.9 0 0 1-1.8 0v-2.1a.78.78 0 0 0-.23-.56l-.5-.49a2 2 0 0 1-.62-1.45V5Z" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="fuel-cost-text">${formatCost(cost)}</span>
+      </span>
     `;
 
     // Вставляем стоимость рядом с расстоянием (в той же строке)
