@@ -22,7 +22,8 @@
   let fuelPrice = DEFAULT_FUEL_PRICE;
   let fuelConsumption = DEFAULT_FUEL_CONSUMPTION;
   let settingsPanel = null;
-  let observer = null;
+  let routeObserver = null;
+  let uiObserver = null;
   let spaObserver = null;
   let updateTimeout = null;
   let routeUpdateTimeout = null;
@@ -536,10 +537,20 @@
     positionSettingsButton();
   }
 
+  function refreshExtensionUi() {
+    createSettingsButton();
+    createSettingsPanel();
+    scheduleButtonPositionUpdate(0);
+  }
+
   function cleanupObservers() {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
+    if (routeObserver) {
+      routeObserver.disconnect();
+      routeObserver = null;
+    }
+    if (uiObserver) {
+      uiObserver.disconnect();
+      uiObserver = null;
     }
     if (spaObserver) {
       spaObserver.disconnect();
@@ -596,12 +607,8 @@
   // Инициализация
   async function init() {
     await loadSettings();
-    
-    // Создаем панель настроек сначала
-    createSettingsPanel();
-    
-    // Создаем кнопку
-    createSettingsButton();
+
+    refreshExtensionUi();
     
     // Скрываем панель настроек по умолчанию
     if (settingsPanel) {
@@ -620,12 +627,12 @@
     } else {
       // Если кнопка не создалась, пробуем еще раз через небольшую задержку
       setTimeout(() => {
-        createSettingsButton();
+        refreshExtensionUi();
       }, DEBOUNCE_MS);
     }
 
     // Наблюдаем за изменениями DOM
-    observer = new MutationObserver((mutations) => {
+    routeObserver = new MutationObserver((mutations) => {
       const routeCardsToRefresh = new Set();
 
       for (const mutation of mutations) {
@@ -647,20 +654,67 @@
       if (routeCardsToRefresh.size > 0) {
         scheduleRouteUpdate(routeCardsToRefresh, DEBOUNCE_MS);
       }
+    });
 
-      scheduleButtonPositionUpdate();
+    uiObserver = new MutationObserver((mutations) => {
+      let shouldRepositionButton = false;
+      let shouldRefreshUi = false;
 
-      if (!document.getElementById(SETTINGS_BUTTON_ID)) {
-        createSettingsButton();
+      for (const mutation of mutations) {
+        if (mutation.type === 'attributes') {
+          const target = mutation.target;
+          if (
+            target.matches?.(SIDEBAR_TOGGLE_ANCHOR_SELECTOR)
+            || target.closest?.('.sidebar-container')
+          ) {
+            shouldRepositionButton = true;
+          }
+        }
+
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (
+            node.matches?.(SIDEBAR_TOGGLE_ANCHOR_SELECTOR)
+            || node.querySelector?.(SIDEBAR_TOGGLE_ANCHOR_SELECTOR)
+            || node.closest?.('.sidebar-container')
+          ) {
+            shouldRepositionButton = true;
+          }
+        }
+
+        for (const node of mutation.removedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          if (
+            node.id === SETTINGS_BUTTON_ID
+            || node.id === SETTINGS_PANEL_ID
+            || node.matches?.(SIDEBAR_TOGGLE_ANCHOR_SELECTOR)
+            || node.querySelector?.(`#${SETTINGS_BUTTON_ID}, #${SETTINGS_PANEL_ID}, ${SIDEBAR_TOGGLE_ANCHOR_SELECTOR}`)
+          ) {
+            shouldRefreshUi = true;
+            shouldRepositionButton = true;
+          }
+        }
+      }
+
+      if (shouldRefreshUi) {
+        refreshExtensionUi();
+      } else if (shouldRepositionButton) {
+        scheduleButtonPositionUpdate(0);
       }
     });
 
     // Начинаем наблюдение — приоритетно на контейнере маршрутов
     const routeRoot = getRoutePanelRoot();
-    const targetNode = routeRoot || document.body;
-    observer.observe(targetNode, {
+    routeObserver.observe(routeRoot || document.body, {
       childList: true,
       subtree: true
+    });
+
+    uiObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'aria-hidden'],
     });
 
     // Привяжем слушатели к полям адресов / кнопке построения маршрута
@@ -669,11 +723,7 @@
     // Первоначальное обновление
     setTimeout(() => {
       updateAllRoutes();
-      // Убеждаемся, что кнопка создана
-      if (!document.getElementById(SETTINGS_BUTTON_ID)) {
-        createSettingsButton();
-      }
-      scheduleButtonPositionUpdate(0);
+      refreshExtensionUi();
     }, INITIAL_UPDATE_DELAY_MS);
   }
 
@@ -691,16 +741,9 @@
     if (url !== lastUrl) {
       lastUrl = url;
       document.querySelectorAll('.fuel-cost-display').forEach(el => el.remove());
-      scheduleUpdate(INITIAL_UPDATE_DELAY_MS);
-      scheduleButtonPositionUpdate(INITIAL_UPDATE_DELAY_MS);
-
-      if (!document.getElementById(SETTINGS_BUTTON_ID)) {
-        createSettingsButton();
-      }
-      if (!document.getElementById(SETTINGS_PANEL_ID)) {
-        createSettingsPanel();
-      }
+      refreshExtensionUi();
       attachRouteInputListeners();
+      scheduleUpdate(INITIAL_UPDATE_DELAY_MS);
     }
   });
   spaObserver.observe(document, { subtree: true, childList: true });
