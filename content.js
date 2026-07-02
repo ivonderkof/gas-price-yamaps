@@ -216,6 +216,10 @@
     if (!routeContainer) {
       return;
     }
+
+    if (!looksLikeRouteSummary(routeCard)) {
+      return;
+    }
     
     // Не добавляем стоимость внутри панели настроек
     if (routeCard.id === SETTINGS_PANEL_ID || routeCard.closest(`#${SETTINGS_PANEL_ID}`)) {
