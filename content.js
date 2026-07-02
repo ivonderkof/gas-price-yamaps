@@ -94,6 +94,16 @@
     return text ? normalizeUiText(`${text} ${ariaLabel}`) : ariaLabel;
   }
 
+  function getDistanceText(node) {
+    const text = normalizeUiText(node?.textContent || '');
+    if (extractDistanceKm(text) !== null) {
+      return text;
+    }
+
+    const ariaLabel = normalizeUiText(node?.getAttribute?.('aria-label') || '');
+    return extractDistanceKm(ariaLabel) !== null ? ariaLabel : text || ariaLabel;
+  }
+
   function looksLikeRouteSummary(node) {
     if (!node) return false;
     if (node.matches?.(DOM_RULES.routeCardExact.join(','))) return true;
@@ -182,15 +192,9 @@
 
     const fallbackMatches = queryAll(DOM_RULES.routeDistanceFallback, routeCard)
       .map((el) => {
-        const text = normalizeUiText(el.textContent || '');
-        const ariaLabel = normalizeUiText(el.getAttribute('aria-label') || '');
-        const candidateText = extractDistanceKm(text) !== null || !ariaLabel
-          ? text
-          : ariaLabel;
-
         return {
           el,
-          text: candidateText,
+          text: getDistanceText(el),
         };
       })
       .filter(({ text }) => extractDistanceKm(text) !== null)
@@ -244,7 +248,7 @@
       return;
     }
 
-    const distanceText = distanceEl.textContent || distanceEl.getAttribute('aria-label') || '';
+    const distanceText = getDistanceText(distanceEl);
     const distance = extractDistanceKm(distanceText);
     if (distance === null) return;
 
@@ -287,6 +291,10 @@
   }
 
   function updateRouteCard(routeCard) {
+    if (!looksLikeRouteSummary(routeCard)) {
+      return;
+    }
+
     clearRouteCardCost(routeCard);
     addFuelCostToRoute(routeCard);
   }
