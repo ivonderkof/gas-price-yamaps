@@ -29,7 +29,6 @@
   const ROUTE_CARD_SELECTOR = '.auto-route-snippet-view';
   const SETTINGS_PANEL_ID = 'fuel-cost-settings';
   const SETTINGS_BUTTON_ID = 'fuel-settings-button';
-  const SCALE_EXCLUDE_SELECTORS = '.map-scale-line, .map-copyrights__scale-line, [data-chunk="scale-line"], .map-controls, .zoom-control';
   const ROUTE_INPUT_KEYWORDS = ['откуда', 'куда'];
   const BUILD_ROUTE_TEXT = 'построить маршрут';
 
@@ -151,26 +150,6 @@
       <span class="fuel-cost-icon">⛽</span>
       <span class="fuel-cost-text">${formatCost(cost)}</span>
     `;
-    
-    costElement.style.cssText = `
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      margin-left: 8px;
-      padding: 2px 8px;
-      background-color: #FF7732;
-      color: white;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 500;
-      line-height: 1.2;
-      white-space: nowrap;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      width: fit-content;
-      min-width: fit-content;
-      max-width: none;
-      height: auto;
-    `;
 
     // Вставляем стоимость рядом с расстоянием (в той же строке)
     // Ищем родительский элемент, который содержит расстояние
@@ -247,37 +226,17 @@
     panel.setAttribute('data-non-ad', 'true');
 
     panel.innerHTML = `
-      <div style="margin-bottom: 12px; font-weight: 600; font-size: 14px; color: #333;">
-        Настройки расчёта топлива
+      <div class="fuel-cost-title">Настройки расчёта топлива</div>
+      <div class="fuel-cost-field">
+        <label for="fuel-price-input">Цена топлива (₽/литр):</label>
+        <input type="number" id="fuel-price-input" value="${fuelPrice}" min="0" step="0.1">
       </div>
-      <div style="margin-bottom: 12px;">
-        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;">
-          Цена топлива (₽/литр):
-        </label>
-        <input type="number" id="fuel-price-input" 
-               value="${fuelPrice}" 
-               min="0" 
-               step="0.1"
-               style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+      <div class="fuel-cost-field">
+        <label for="fuel-consumption-input">Расход топлива (л/100км):</label>
+        <input type="number" id="fuel-consumption-input" value="${fuelConsumption}" min="0" step="0.1">
       </div>
-      <div style="margin-bottom: 12px;">
-        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #666;">
-          Расход топлива (л/100км):
-        </label>
-        <input type="number" id="fuel-consumption-input" 
-               value="${fuelConsumption}" 
-               min="0" 
-               step="0.1"
-               style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
-      </div>
-      <button id="fuel-settings-apply" 
-              style="width: 100%; padding: 8px; background: #ff6b35; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
-        Применить
-      </button>
-      <button id="fuel-settings-toggle" 
-              style="position: absolute; top: 8px; right: 8px; background: none; border: none; cursor: pointer; font-size: 18px; color: #999; padding: 4px 8px;">
-        ×
-      </button>
+      <button id="fuel-settings-apply" class="fuel-cost-apply">Применить</button>
+      <button id="fuel-settings-toggle" class="fuel-cost-close" aria-label="Закрыть">×</button>
     `;
 
     document.body.appendChild(panel);
@@ -352,25 +311,6 @@
     button.innerHTML = '⛽';
     button.title = 'Настройки расчёта топлива';
     button.setAttribute('aria-label', 'Настройки расчёта топлива');
-
-    button.addEventListener('mouseenter', () => {
-      button.style.transform = 'scale(1.1)';
-      button.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-    });
-
-    button.addEventListener('mouseleave', () => {
-      button.style.transform = 'scale(1)';
-      button.style.boxShadow = '0 2px 10px rgba(0,0,0,0.25)';
-    });
-    
-    button.addEventListener('focus', () => {
-      button.style.outline = '2px solid #ff6b35';
-      button.style.outlineOffset = '2px';
-    });
-    
-    button.addEventListener('blur', () => {
-      button.style.outline = 'none';
-    });
 
     button.addEventListener('click', (e) => {
       e.preventDefault();
