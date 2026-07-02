@@ -55,3 +55,15 @@ Manual smoke was not run in this environment.
 - `npm test` — PASS
 - `node --check content.js` — PASS
 - `git diff --check` — PASS
+
+## Fix wave 3
+
+- Tightened `findDistanceElement()` so fallback candidates first normalize `textContent`, then fall back to normalized `aria-label` when the primary text is empty or does not parse as a distance.
+- Expanded the `debugDom('distance-not-found', ...)` selector context to include both exact and fallback distance selectors.
+
+### Commands and results
+
+- `npm test` — PASS
+- `node --check content.js` — PASS
+- `node --check fuel-core.js` — PASS
+- `git diff --check` — PASS

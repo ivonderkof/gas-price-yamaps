@@ -141,10 +141,18 @@
     }
 
     const fallbackMatches = queryAll(DOM_RULES.routeDistanceFallback, routeCard)
-      .map((el) => ({
-        el,
-        text: normalizeUiText(el.textContent || el.getAttribute('aria-label') || ''),
-      }))
+      .map((el) => {
+        const text = normalizeUiText(el.textContent || '');
+        const ariaLabel = normalizeUiText(el.getAttribute('aria-label') || '');
+        const candidateText = extractDistanceKm(text) !== null || !ariaLabel
+          ? text
+          : ariaLabel;
+
+        return {
+          el,
+          text: candidateText,
+        };
+      })
       .filter(({ text }) => extractDistanceKm(text) !== null)
       .filter(({ el, text }) => {
         if (isPureDistanceText(text)) return true;
@@ -187,7 +195,7 @@
       if (routeText.includes('км') || routeText.includes(' м')) {
         debugDom('distance-not-found', {
           routeText: routeText.slice(0, 200),
-          selectors: DOM_RULES.routeDistanceExact,
+          selectors: [...DOM_RULES.routeDistanceExact, ...DOM_RULES.routeDistanceFallback],
         });
       }
       return;
