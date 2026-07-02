@@ -83,11 +83,51 @@
     return results;
   }
 
+  function getRouteLikeText(node) {
+    const text = normalizeUiText(node?.textContent || '');
+    const ariaLabel = normalizeUiText(node?.getAttribute?.('aria-label') || '');
+
+    if (!ariaLabel || text.includes(ariaLabel)) {
+      return text;
+    }
+
+    return text ? normalizeUiText(`${text} ${ariaLabel}`) : ariaLabel;
+  }
+
+  function looksLikeRouteSummary(node) {
+    if (!node) return false;
+    if (node.matches?.(DOM_RULES.routeCardExact.join(','))) return true;
+
+    const routeText = getRouteLikeText(node);
+    if (extractDistanceKm(routeText) === null) return false;
+
+    if (node.matches?.('[class*="route-snippet"]') || node.closest?.('[class*="route-snippet"]')) {
+      return true;
+    }
+
+    return routeText.includes('мин') || routeText.includes('ч');
+  }
+
+  function isDetailedRouteCard(routeCard) {
+    if (!routeCard) return false;
+    if (routeCard.matches?.(DOM_RULES.routeCardExact.join(','))) return false;
+    if (routeCard.closest?.(detailedRouteChildSelector)) return true;
+
+    const isDetailedRoute = routeCard.closest(detailedRouteContainerSelector);
+    if (isDetailedRoute && routeCard.querySelector(detailedRouteChildSelector)) {
+      return true;
+    }
+
+    const parentContainer = routeCard.closest('[class*="panel"], [class*="Panel"]');
+    return Boolean(parentContainer?.querySelector(detailedRouteChildSelector) && !looksLikeRouteSummary(routeCard));
+  }
+
   function findRouteCards(root = document) {
     const exactCards = queryAll(DOM_RULES.routeCardExact, root);
     if (exactCards.length > 0) return exactCards;
 
-    const fallbackCards = queryAll(DOM_RULES.routeCardFallback, root);
+    const fallbackCards = queryAll(DOM_RULES.routeCardFallback, root)
+      .filter((card) => looksLikeRouteSummary(card));
     if (fallbackCards.length > 0) return fallbackCards;
 
     const distanceNodes = queryAll(DOM_RULES.routeDistanceFallback, root);
@@ -96,7 +136,7 @@
 
     for (const node of distanceNodes) {
       const card = node.closest(DOM_RULES.routeCardFallback.join(','));
-      if (card && !seen.has(card)) {
+      if (card && looksLikeRouteSummary(card) && !seen.has(card)) {
         seen.add(card);
         derivedCards.push(card);
       }
@@ -184,14 +224,13 @@
     
     // Не показываем стоимость в детальном маршруте (где показываются направления)
     // Проверяем, находится ли элемент в детальном виде маршрута
-    const isDetailedRoute = routeCard.closest(detailedRouteContainerSelector);
-    if (isDetailedRoute && routeCard.querySelector(detailedRouteChildSelector)) {
+    if (isDetailedRouteCard(routeCard)) {
       return;
     }
 
     const distanceEl = findDistanceElement(routeCard);
     if (!distanceEl) {
-      const routeText = normalizeUiText(routeCard.textContent || '');
+      const routeText = getRouteLikeText(routeCard);
       if (routeText.includes('км') || routeText.includes(' м')) {
         debugDom('distance-not-found', {
           routeText: routeText.slice(0, 200),
