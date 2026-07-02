@@ -8,6 +8,9 @@
     extractDistanceKm,
     calculateFuelCost,
     formatCost,
+    normalizeUiText,
+    isPureDistanceText,
+    scoreDistanceCandidateText,
   } = globalThis.FuelCalcCore;
 
   // Настройки по умолчанию
@@ -27,16 +30,80 @@
   let pendingRouteCards = new Set();
 
   // Константы селекторов и таймаутов
-  const ROUTE_DISTANCE_SELECTOR = '.auto-route-snippet-view .auto-route-snippet-view__distance';
-  const ROUTE_CARD_SELECTOR = '.auto-route-snippet-view';
+  const DOM_RULES = {
+    routeCardExact: ['.auto-route-snippet-view'],
+    routeCardFallback: ['[class*="route-snippet"]', '[class*="snippet-view"]'],
+    routeDistanceExact: ['.auto-route-snippet-view__distance'],
+    routeDistanceFallback: ['[class*="distance"]', '[aria-label*="км"]', '[aria-label*="м"]'],
+    detailedRouteContainers: [
+      '[class*="route-panel"]',
+      '[class*="route-details"]',
+      '[class*="route-instructions"]',
+      '[class*="route-panel__content"]',
+    ],
+    detailedRouteChildren: [
+      '[class*="instruction"]',
+      '[class*="direction"]',
+      '[class*="step"]',
+      '[class*="maneuver"]',
+      '[class*="route-instruction"]',
+      '[class*="route-step-view"]',
+    ],
+  };
+  const DEBUG_DOM_BREAKAGE = false;
   const SETTINGS_PANEL_ID = 'fuel-cost-settings';
   const SETTINGS_BUTTON_ID = 'fuel-settings-button';
   const ROUTE_INPUT_KEYWORDS = ['откуда', 'куда'];
   const BUILD_ROUTE_TEXT = 'построить маршрут';
+  const detailedRouteContainerSelector = DOM_RULES.detailedRouteContainers.join(',');
+  const detailedRouteChildSelector = DOM_RULES.detailedRouteChildren.join(',');
 
   const DEBOUNCE_MS = 500;
   const INPUT_DEBOUNCE_MS = 800;
   const INITIAL_UPDATE_DELAY_MS = 1000;
+
+  function debugDom(event, details = {}) {
+    if (!DEBUG_DOM_BREAKAGE) return;
+    console.debug('[ymaps-fuel-calc]', event, details);
+  }
+
+  function queryAll(selectors, root = document) {
+    const results = [];
+    const seen = new Set();
+
+    for (const selector of selectors) {
+      root.querySelectorAll(selector).forEach((node) => {
+        if (!seen.has(node)) {
+          seen.add(node);
+          results.push(node);
+        }
+      });
+    }
+
+    return results;
+  }
+
+  function findRouteCards(root = document) {
+    const exactCards = queryAll(DOM_RULES.routeCardExact, root);
+    if (exactCards.length > 0) return exactCards;
+
+    const fallbackCards = queryAll(DOM_RULES.routeCardFallback, root);
+    if (fallbackCards.length > 0) return fallbackCards;
+
+    const distanceNodes = queryAll(DOM_RULES.routeDistanceFallback, root);
+    const derivedCards = [];
+    const seen = new Set();
+
+    for (const node of distanceNodes) {
+      const card = node.closest(DOM_RULES.routeCardFallback.join(','));
+      if (card && !seen.has(card)) {
+        seen.add(card);
+        derivedCards.push(card);
+      }
+    }
+
+    return derivedCards;
+  }
 
   // Загрузка настроек из storage
   async function loadSettings() {
@@ -66,27 +133,26 @@
 
   // Поиск элемента с расстоянием в карточке маршрута
   function findDistanceElement(routeCard) {
-    // Ищем текст с расстоянием (обычно это элемент с классом или текстом "км")
-    // Сначала ищем прямые текстовые узлы и элементы с текстом "км"
-    const textElements = routeCard.querySelectorAll('*');
-    let bestMatch = null;
-    let bestMatchDistance = 0;
-    
-    for (const el of textElements) {
-      const distance = extractDistanceKm(el.textContent || '');
-      if (distance !== null && distance > bestMatchDistance) {
-        const cleanText = (el.textContent || '').trim();
-        if (cleanText.match(/^\d[\d\s.,]*\s*(км|м)$/i)) {
-          bestMatch = el;
-          bestMatchDistance = distance;
-        } else if (!bestMatch) {
-          bestMatch = el;
-          bestMatchDistance = distance;
-        }
-      }
+    const exactMatches = queryAll(DOM_RULES.routeDistanceExact, routeCard)
+      .filter((el) => extractDistanceKm(el.textContent || '') !== null);
+
+    if (exactMatches.length > 0) {
+      return exactMatches[0];
     }
-    
-    return bestMatch;
+
+    const fallbackMatches = queryAll(DOM_RULES.routeDistanceFallback, routeCard)
+      .map((el) => ({
+        el,
+        text: normalizeUiText(el.textContent || el.getAttribute('aria-label') || ''),
+      }))
+      .filter(({ text }) => extractDistanceKm(text) !== null)
+      .filter(({ el, text }) => {
+        if (isPureDistanceText(text)) return true;
+        return queryAll(DOM_RULES.routeDistanceFallback, el).length === 0;
+      })
+      .sort((a, b) => scoreDistanceCandidateText(b.text) - scoreDistanceCandidateText(a.text));
+
+    return fallbackMatches[0]?.el || null;
   }
 
   // Добавление стоимости бензина к маршруту
@@ -97,7 +163,8 @@
     }
     
     // Обрабатываем только карточки маршрутов (список вариантов маршрутов)
-    const routeContainer = routeCard.closest('.auto-route-snippet-view');
+    const routeContainer = routeCard.closest(DOM_RULES.routeCardExact.join(','))
+      || routeCard.closest(DOM_RULES.routeCardFallback.join(','));
     if (!routeContainer) {
       return;
     }
@@ -109,28 +176,22 @@
     
     // Не показываем стоимость в детальном маршруте (где показываются направления)
     // Проверяем, находится ли элемент в детальном виде маршрута
-    const isDetailedRoute = routeCard.closest('[class*="route-panel"], [class*="route-details"], [class*="route-instructions"], [class*="route-step"], [class*="route-item"], [class*="route-panel-view"], [class*="route-panel__content"]');
-    if (isDetailedRoute) {
-      // Дополнительная проверка: если есть элементы с направлениями/инструкциями
-      const hasInstructions = routeCard.querySelector('[class*="instruction"], [class*="direction"], [class*="step"], [class*="maneuver"], [class*="route-instruction"], [class*="route-step-view"]');
-      if (hasInstructions) {
-        return;
-      }
-    }
-    
-    // Проверяем, не находимся ли мы в детальном виде маршрута
-    // В детальном виде обычно есть элементы с пошаговыми инструкциями
-    const parentContainer = routeCard.closest('[class*="panel"], [class*="Panel"]');
-    if (parentContainer) {
-      const hasRouteSteps = parentContainer.querySelector('[class*="step"], [class*="instruction"], [class*="route-step"], [class*="route-instruction"]');
-      // Если это не основной список маршрутов (auto-route-snippet-view), а детальный вид
-      if (hasRouteSteps && !routeCard.closest('.auto-route-snippet-view')) {
-        return;
-      }
+    const isDetailedRoute = routeCard.closest(detailedRouteContainerSelector);
+    if (isDetailedRoute && routeCard.querySelector(detailedRouteChildSelector)) {
+      return;
     }
 
     const distanceEl = findDistanceElement(routeCard);
-    if (!distanceEl) return;
+    if (!distanceEl) {
+      const routeText = normalizeUiText(routeCard.textContent || '');
+      if (routeText.includes('км') || routeText.includes(' м')) {
+        debugDom('distance-not-found', {
+          routeText: routeText.slice(0, 200),
+          selectors: DOM_RULES.routeDistanceExact,
+        });
+      }
+      return;
+    }
 
     const distanceText = distanceEl.textContent || '';
     const distance = extractDistanceKm(distanceText);
@@ -189,27 +250,12 @@
       // Сначала удаляем все старые элементы стоимости
       document.querySelectorAll('.fuel-cost-display').forEach(el => el.remove());
 
-      // Ищем расстояния только в карточках списка маршрутов
-      const distanceElements = document.querySelectorAll(ROUTE_DISTANCE_SELECTOR);
-      if (distanceElements.length === 0) {
-        // Нет списка маршрутов — ничего не делаем (например, просто поиск мест)
+      const routeCards = findRouteCards();
+      if (routeCards.length === 0) {
         return;
       }
 
-      const processedRoutes = new Set();
-      
-      distanceElements.forEach(distanceEl => {
-        const text = distanceEl.textContent || '';
-        const distance = extractDistanceKm(text);
-        if (distance !== null) {
-          // Находим родительскую карточку маршрута
-          const routeCard = distanceEl.closest(ROUTE_CARD_SELECTOR);
-          if (routeCard && !processedRoutes.has(routeCard)) {
-            processedRoutes.add(routeCard);
-            addFuelCostToRoute(routeCard);
-          }
-        }
-      });
+      routeCards.forEach((routeCard) => updateRouteCard(routeCard));
     } finally {
       isUpdating = false;
     }
@@ -382,11 +428,8 @@
 
   // Находим корневой контейнер списка маршрутов, чтобы сузить наблюдение
   function getRoutePanelRoot() {
-    const routeItem = document.querySelector(ROUTE_CARD_SELECTOR);
-    if (routeItem && routeItem.parentElement) {
-      return routeItem.parentElement;
-    }
-    return null;
+    const [routeCard] = findRouteCards();
+    return routeCard?.parentElement || null;
   }
 
   // Доп. триггер обновления при изменении полей адреса или клике на "Построить маршрут"
@@ -456,15 +499,10 @@
           if (node.id === SETTINGS_PANEL_ID || node.id === SETTINGS_BUTTON_ID) continue;
           if (node.classList?.contains('fuel-cost-display')) continue;
 
-          if (node.matches?.(ROUTE_CARD_SELECTOR)) {
-            routeCardsToRefresh.add(node);
-          }
+          findRouteCards(node).forEach((card) => routeCardsToRefresh.add(card));
 
-          node.querySelectorAll?.(ROUTE_CARD_SELECTOR).forEach((card) => {
-            routeCardsToRefresh.add(card);
-          });
-
-          const parentRouteCard = node.closest?.(ROUTE_CARD_SELECTOR);
+          const parentRouteCard = node.closest?.(DOM_RULES.routeCardExact.join(','))
+            || node.closest?.(DOM_RULES.routeCardFallback.join(','));
           if (parentRouteCard) {
             routeCardsToRefresh.add(parentRouteCard);
           }
