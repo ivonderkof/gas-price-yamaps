@@ -31,13 +31,6 @@
   font-weight: 500;
 }
 
-.route-distance-container {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
 #fuel-cost-settings {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
@@ -60,6 +53,56 @@
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
+}
+
+.fuel-cost-title {
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.fuel-cost-field {
+  margin-bottom: 12px;
+}
+
+.fuel-cost-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.fuel-cost-field input[type="number"] {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.fuel-cost-apply {
+  width: 100%;
+  padding: 8px;
+  background: #ff6b35;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fuel-cost-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #999;
+  padding: 4px 8px;
 }
 
 /* Кнопка настроек */
@@ -99,25 +142,17 @@
   outline-offset: 2px;
 }
 
-#fuel-cost-settings input[type="number"]:focus {
+.fuel-cost-settings input[type="number"]:focus {
   outline: none;
   border-color: #ff6b35;
   box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
 }
 
-#fuel-settings-apply:hover {
+.fuel-cost-apply:hover {
   background: #e55a2b !important;
 }
 
-#fuel-settings-apply:active {
-  background: #cc4f24 !important;
-}
-
-#fuel-settings-button:hover {
-  background: #e55a2b !important;
-}
-
-#fuel-settings-button:active {
+.fuel-cost-apply:active {
   background: #cc4f24 !important;
 }
 
