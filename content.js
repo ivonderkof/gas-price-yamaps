@@ -35,6 +35,11 @@
     routeCardFallback: ['[class*="route-snippet"]', '[class*="snippet-view"]'],
     routeDistanceExact: ['.auto-route-snippet-view__distance'],
     routeDistanceFallback: ['[class*="distance"]', '[aria-label*="км"]', '[aria-label*="м"]'],
+    routeSummaryHints: [
+      '[class*="route"][class*="snippet"]',
+      '[class*="route"][class*="distance"]',
+      '[class*="route"][class*="duration"]',
+    ],
     detailedRouteContainers: [
       '[class*="route-panel"]',
       '[class*="route-details"]',
@@ -116,7 +121,7 @@
       || node.closest?.('[class*="route-snippet"]')
       || node.matches?.('[class*="auto-route"]')
       || node.closest?.('[class*="auto-route"]')
-      || node.querySelector?.('[class*="route"]')
+      || node.querySelector?.(DOM_RULES.routeSummaryHints.join(','))
     );
   }
 
