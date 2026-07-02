@@ -67,3 +67,58 @@ Manual smoke was not run in this environment.
 - `node --check content.js` — PASS
 - `node --check fuel-core.js` — PASS
 - `git diff --check` — PASS
+
+## Fix wave 4
+
+- Filtered fallback route-card discovery through route-summary heuristics so generic `snippet-view` nodes do not get treated as route cards unless they actually look like route summaries.
+- Restored the broader detailed-route exclusion by checking route-step content in parent panels and skipping non-summary detailed route items.
+- Reused route-like text extraction for debug diagnostics so aria-label-only route content is visible when `DEBUG_DOM_BREAKAGE = true`.
+
+### Commands and results
+
+- `npm test` — PASS
+- `node --check content.js` — PASS
+- `git diff --check` — PASS
+
+## Fix wave 5
+
+- Added the same route-summary guard to `addFuelCostToRoute()` so fallback `snippet-view` ancestors queued by the `MutationObserver` cannot receive a badge unless they still look like actual route summary cards.
+
+### Commands and results
+
+- `npm test` — PASS
+- `node --check content.js` — PASS
+- `git diff --check` — PASS
+
+## Fix wave 6
+
+- Reused one `getDistanceText()` helper in both candidate selection and final cost parsing so aria-label-only distance nodes cannot be selected one way and parsed another.
+- Moved the route-summary guard into `updateRouteCard()` before clearing existing badges, so broad fallback ancestors can no longer remove valid badges during observer refreshes.
+
+### Commands and results
+
+- `npm test` — PASS
+- `node --check content.js` — PASS
+- `git diff --check` — PASS
+
+## Fix wave 7
+
+- Removed the broad `мин/ч` fallback heuristic and narrowed fallback route-card matching to route-specific class patterns only.
+- Kept the exact route-card path unchanged and preserved the shared route-summary guard around fallback refreshes.
+
+### Commands and results
+
+- `npm test` — PASS
+- `node --check content.js` — PASS
+- `git diff --check` — PASS
+
+## Fix wave 8
+
+- Restored `[class*="snippet-view"]` to the fallback selector set, but now only treat those nodes as route summaries when they still expose route-class hints in the node or its descendants.
+- This keeps the requested generic snippet fallback without reopening the broad text-based false-positive path.
+
+### Commands and results
+
+- `npm test` — PASS
+- `node --check content.js` — PASS
+- `git diff --check` — PASS

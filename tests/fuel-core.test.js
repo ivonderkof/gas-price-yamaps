@@ -22,6 +22,7 @@ test('extractDistanceKm parses kilometers and meters', () => {
   assert.equal(extractDistanceKm('9,5 км'), 9.5);
   assert.equal(extractDistanceKm('850 м'), 0.85);
   assert.equal(extractDistanceKm('1 250 м'), 1.25);
+  assert.equal(extractDistanceKm('60 км/ч'), null);
   assert.equal(extractDistanceKm('Построить маршрут'), null);
 });
 

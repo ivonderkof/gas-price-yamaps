@@ -17,7 +17,7 @@
 
     const cleaned = normalizeUiText(text);
 
-    const kmMatch = cleaned.match(/(\d[\d\s.,]*)\s*км/i);
+    const kmMatch = cleaned.match(/(\d[\d\s.,]*)\s*км(?=$|[\s.,;:)])/i);
     if (kmMatch) {
       const numeric = kmMatch[1].replace(/\s+/g, '').replace(',', '.');
       const value = parseFloat(numeric);
