@@ -11,6 +11,7 @@
     normalizeUiText,
     isPureDistanceText,
     scoreDistanceCandidateText,
+    resolveSettingsButtonPosition,
   } = globalThis.FuelCalcCore;
 
   // Настройки по умолчанию
@@ -58,6 +59,10 @@
   const DEBUG_DOM_BREAKAGE = false;
   const SETTINGS_PANEL_ID = 'fuel-cost-settings';
   const SETTINGS_BUTTON_ID = 'fuel-settings-button';
+  const SETTINGS_BUTTON_FALLBACK_RECT = { top: 100, right: 20 };
+  const SETTINGS_BUTTON_SIZE = 44;
+  const SETTINGS_BUTTON_GAP = 8;
+  const SIDEBAR_TOGGLE_ANCHOR_SELECTOR = '.sidebar-toggle-button._name_routes';
   const ROUTE_INPUT_KEYWORDS = ['откуда', 'куда'];
   const BUILD_ROUTE_TEXT = 'построить маршрут';
   const detailedRouteContainerSelector = DOM_RULES.detailedRouteContainers.join(',');
@@ -66,6 +71,7 @@
   const DEBOUNCE_MS = 500;
   const INPUT_DEBOUNCE_MS = 800;
   const INITIAL_UPDATE_DELAY_MS = 1000;
+  let buttonPositionTimeout = null;
 
   function debugDom(event, details = {}) {
     if (!DEBUG_DOM_BREAKAGE) return;
@@ -364,9 +370,71 @@
     }, delay);
   }
 
+  function getVisibleAnchorRect(anchor) {
+    if (!anchor || !anchor.isConnected) return null;
+
+    const rect = anchor.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 ? rect : null;
+  }
+
+  function findSettingsButtonAnchor() {
+    return document.querySelector(SIDEBAR_TOGGLE_ANCHOR_SELECTOR);
+  }
+
+  function positionSettingsButton() {
+    const button = document.getElementById(SETTINGS_BUTTON_ID);
+    if (!button) return;
+
+    const anchorRect = getVisibleAnchorRect(findSettingsButtonAnchor());
+    const position = resolveSettingsButtonPosition(
+      anchorRect,
+      SETTINGS_BUTTON_FALLBACK_RECT,
+      { buttonSize: SETTINGS_BUTTON_SIZE, gap: SETTINGS_BUTTON_GAP }
+    );
+
+    button.classList.toggle('_anchored', position.mode === 'anchored');
+    button.style.top = `${position.top}px`;
+
+    if (position.mode === 'anchored') {
+      button.style.left = `${position.left}px`;
+      button.style.right = 'auto';
+      return;
+    }
+
+    button.style.left = 'auto';
+    button.style.right = `${position.right}px`;
+  }
+
+  function scheduleButtonPositionUpdate(delay = DEBOUNCE_MS) {
+    if (buttonPositionTimeout) {
+      clearTimeout(buttonPositionTimeout);
+    }
+
+    buttonPositionTimeout = setTimeout(() => {
+      buttonPositionTimeout = null;
+      positionSettingsButton();
+    }, delay);
+  }
+
+  function toggleSettingsPanel(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const panel = createSettingsPanel();
+    if (panel.style.display === 'none' || !panel.style.display) {
+      panel.style.display = 'block';
+      panel.style.visibility = 'visible';
+      panel.style.opacity = '1';
+      return;
+    }
+
+    panel.style.display = 'none';
+  }
+
   // Создание панели настроек
   function createSettingsPanel() {
-    if (settingsPanel) return settingsPanel;
+    if (settingsPanel && settingsPanel.isConnected) return settingsPanel;
+    settingsPanel = null;
 
     const panel = document.createElement('div');
     panel.id = SETTINGS_PANEL_ID;
@@ -447,6 +515,7 @@
   function createSettingsButton() {
     // Проверяем, не создана ли уже кнопка
     if (document.getElementById(SETTINGS_BUTTON_ID)) {
+      scheduleButtonPositionUpdate(0);
       return;
     }
     
@@ -461,22 +530,10 @@
     button.innerHTML = '⛽';
     button.title = 'Настройки расчёта топлива';
     button.setAttribute('aria-label', 'Настройки расчёта топлива');
-
-    button.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const panel = createSettingsPanel();
-      // Переключаем видимость панели
-      if (panel.style.display === 'none' || !panel.style.display) {
-        panel.style.display = 'block';
-        panel.style.visibility = 'visible';
-        panel.style.opacity = '1';
-      } else {
-        panel.style.display = 'none';
-      }
-    });
+    button.addEventListener('click', toggleSettingsPanel);
 
     document.body.appendChild(button);
+    positionSettingsButton();
   }
 
   function cleanupObservers() {
@@ -495,6 +552,10 @@
     if (routeUpdateTimeout) {
       clearTimeout(routeUpdateTimeout);
       routeUpdateTimeout = null;
+    }
+    if (buttonPositionTimeout) {
+      clearTimeout(buttonPositionTimeout);
+      buttonPositionTimeout = null;
     }
     pendingRouteCards.clear();
   }
@@ -555,6 +616,7 @@
       button.style.display = 'flex';
       button.style.visibility = 'visible';
       button.style.opacity = '1';
+      scheduleButtonPositionUpdate(0);
     } else {
       // Если кнопка не создалась, пробуем еще раз через небольшую задержку
       setTimeout(() => {
@@ -586,6 +648,8 @@
         scheduleRouteUpdate(routeCardsToRefresh, DEBOUNCE_MS);
       }
 
+      scheduleButtonPositionUpdate();
+
       if (!document.getElementById(SETTINGS_BUTTON_ID)) {
         createSettingsButton();
       }
@@ -609,6 +673,7 @@
       if (!document.getElementById(SETTINGS_BUTTON_ID)) {
         createSettingsButton();
       }
+      scheduleButtonPositionUpdate(0);
     }, INITIAL_UPDATE_DELAY_MS);
   }
 
@@ -627,6 +692,7 @@
       lastUrl = url;
       document.querySelectorAll('.fuel-cost-display').forEach(el => el.remove());
       scheduleUpdate(INITIAL_UPDATE_DELAY_MS);
+      scheduleButtonPositionUpdate(INITIAL_UPDATE_DELAY_MS);
 
       if (!document.getElementById(SETTINGS_BUTTON_ID)) {
         createSettingsButton();
@@ -638,6 +704,8 @@
     }
   });
   spaObserver.observe(document, { subtree: true, childList: true });
+
+  window.addEventListener('resize', () => scheduleButtonPositionUpdate(0));
 
   // Очистка наблюдателей при выгрузке
   window.addEventListener('beforeunload', cleanupObservers);
