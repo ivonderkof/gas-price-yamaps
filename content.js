@@ -193,7 +193,7 @@
       return;
     }
 
-    const distanceText = distanceEl.textContent || '';
+    const distanceText = distanceEl.textContent || distanceEl.getAttribute('aria-label') || '';
     const distance = extractDistanceKm(distanceText);
     if (distance === null) return;
 
