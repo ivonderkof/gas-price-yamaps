@@ -1,0 +1,56 @@
+name: Release extension
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify manifest version matches tag
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          manifest_version="$(node -p "require('./manifest.json').version")"
+
+          if [ "$manifest_version" != "$tag_version" ]; then
+            echo "Tag version ($tag_version) does not match manifest version ($manifest_version)."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build release zip
+        shell: bash
+        run: |
+          mkdir -p dist
+          zip -r "dist/gas-price-yamaps-${GITHUB_REF_NAME}.zip" \
+            manifest.json \
+            content.js \
+            fuel-core.js \
+            styles.css \
+            icons
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/gas-price-yamaps-${GITHUB_REF_NAME}.zip" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
