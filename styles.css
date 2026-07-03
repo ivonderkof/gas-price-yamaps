@@ -1,37 +1,45 @@
 /* Стили для расширения Yandex Maps Fuel Cost Calculator */
 
 .fuel-cost-display {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 8px;
+  display: flex;
+  align-items: flex-start;
+  margin-top: 6px;
   padding: 0;
   background: transparent;
   color: inherit;
   border: 0;
   border-radius: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
-  line-height: 20px;
-  white-space: nowrap;
+  line-height: 1.2;
   box-shadow: none;
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+}
+
+.fuel-cost-display._inline {
+  display: inline-flex;
+  margin-top: 0;
+  margin-left: 8px;
+  vertical-align: top;
   width: fit-content;
-  min-width: fit-content;
-  max-width: none;
-  height: 20px;
 }
 
 .fuel-cost-badge {
-  display: flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 4px 0 0;
+  display: inline-flex;
+  align-items: flex-start;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 4px 10px 4px 4px;
   background: #ff7732;
-  border-radius: 6px;
+  border-radius: 11px;
 }
 
 .fuel-cost-icon {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: block;
   font-size: 0;
   line-height: 0;
@@ -40,19 +48,48 @@
 }
 
 .fuel-cost-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: block;
+}
+
+.fuel-cost-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 1px 0;
 }
 
 .fuel-cost-text {
   display: block;
-  height: 14px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.fuel-cost-meta {
+  display: block;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+.fuel-cost-display._split .fuel-cost-body {
+  gap: 1px;
+}
+
+.fuel-cost-display._split .fuel-cost-text,
+.fuel-cost-display._split .fuel-cost-meta {
   color: #fff;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 14px;
-  letter-spacing: 0;
 }
 
 #fuel-cost-settings {
@@ -64,6 +101,7 @@
   position: fixed;
   top: 150px;
   right: 20px;
+  left: auto;
   background: white;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -103,6 +141,19 @@
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 14px;
+}
+
+.fuel-cost-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #333;
+}
+
+.fuel-cost-checkbox input[type="checkbox"] {
+  margin: 0;
 }
 
 .fuel-cost-apply {
@@ -148,7 +199,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
   outline: none;
 }
 
@@ -159,7 +210,6 @@
 .fuel-settings-button:hover {
   background: #e55a2b !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transform: scale(1.1);
 }
 
 .fuel-settings-button:active {

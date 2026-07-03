@@ -6,21 +6,27 @@
   const {
     normalizeStoredNumber,
     extractDistanceKm,
-    calculateFuelCost,
+    extractTollCost,
+    calculateRouteMetrics,
+    buildRouteCostLines,
     formatCost,
+    formatCostPerKm,
     normalizeUiText,
     isPureDistanceText,
     scoreDistanceCandidateText,
     resolveSettingsButtonPosition,
+    resolveSettingsPanelPosition,
   } = globalThis.FuelCalcCore;
 
   // Настройки по умолчанию
   const DEFAULT_FUEL_PRICE = 50; // руб/литр
   const DEFAULT_FUEL_CONSUMPTION = 8; // литров на 100 км
+  const DEFAULT_ROUND_TRIP = false;
 
   // Состояние
   let fuelPrice = DEFAULT_FUEL_PRICE;
   let fuelConsumption = DEFAULT_FUEL_CONSUMPTION;
+  let isRoundTrip = DEFAULT_ROUND_TRIP;
   let settingsPanel = null;
   let routeObserver = null;
   let uiObserver = null;
@@ -38,6 +44,13 @@
     routeCardFallback: ['[class*="route-snippet"]', '[class*="snippet-view"]'],
     routeDistanceExact: ['.auto-route-snippet-view__distance'],
     routeDistanceFallback: ['[class*="distance"]', '[aria-label*="км"]', '[aria-label*="м"]'],
+    routeMetaContainers: [
+      '[class*="snippet-view__data"]',
+      '[class*="route-snippet-view__data"]',
+      '[class*="route-snippet-view__content"]',
+      '[class*="route-summary"]',
+      '[class*="route-info"]',
+    ],
     routeSummaryHints: [
       '[class*="route"][class*="snippet"]',
       '[class*="route"][class*="distance"]',
@@ -64,6 +77,10 @@
   const SETTINGS_BUTTON_FALLBACK_RECT = { top: 100, right: 20 };
   const SETTINGS_BUTTON_SIZE = 44;
   const SETTINGS_BUTTON_GAP = 8;
+  const SETTINGS_PANEL_FALLBACK_RECT = { top: 150, right: 20 };
+  const SETTINGS_PANEL_GAP = 12;
+  const SETTINGS_PANEL_DEFAULT_WIDTH = 320;
+  const SETTINGS_PANEL_DEFAULT_HEIGHT = 260;
   const SIDEBAR_TOGGLE_ANCHOR_SELECTOR = '.sidebar-toggle-button._name_routes';
   const ROUTE_INPUT_KEYWORDS = ['откуда', 'куда'];
   const BUILD_ROUTE_TEXT = 'построить маршрут';
@@ -173,23 +190,26 @@
   // Загрузка настроек из storage
   async function loadSettings() {
     try {
-      const result = await chrome.storage.local.get(['fuelPrice', 'fuelConsumption']);
+      const result = await chrome.storage.local.get(['fuelPrice', 'fuelConsumption', 'roundTrip']);
       fuelPrice = normalizeStoredNumber(result.fuelPrice, DEFAULT_FUEL_PRICE);
       fuelConsumption = normalizeStoredNumber(result.fuelConsumption, DEFAULT_FUEL_CONSUMPTION);
+      isRoundTrip = Boolean(result.roundTrip);
     } catch (error) {
       console.error('Ошибка загрузки настроек:', error);
     }
   }
 
   // Сохранение настроек в storage
-  async function saveSettings(price, consumption) {
+  async function saveSettings(price, consumption, roundTrip) {
     try {
       await chrome.storage.local.set({
         fuelPrice: price,
-        fuelConsumption: consumption
+        fuelConsumption: consumption,
+        roundTrip,
       });
       fuelPrice = price;
       fuelConsumption = consumption;
+      isRoundTrip = roundTrip;
       updateAllRoutes();
     } catch (error) {
       console.error('Ошибка сохранения настроек:', error);
@@ -220,6 +240,33 @@
       .sort((a, b) => scoreDistanceCandidateText(b.text) - scoreDistanceCandidateText(a.text));
 
     return fallbackMatches[0]?.el || null;
+  }
+
+  function insertFuelCostElement(routeCard, distanceEl, costElement) {
+    const metaContainer = distanceEl.closest(DOM_RULES.routeMetaContainers.join(','));
+    if (
+      metaContainer
+      && routeCard.contains(metaContainer)
+      && metaContainer.parentNode
+      && metaContainer !== routeCard
+    ) {
+      metaContainer.parentNode.insertBefore(costElement, metaContainer.nextSibling);
+      return;
+    }
+
+    const lineContainer = distanceEl.parentElement;
+    if (
+      lineContainer
+      && routeCard.contains(lineContainer)
+      && lineContainer.parentNode
+      && lineContainer !== routeCard
+    ) {
+      lineContainer.parentNode.insertBefore(costElement, lineContainer.nextSibling);
+      return;
+    }
+
+    costElement.classList.add('_inline');
+    distanceEl.parentNode.insertBefore(costElement, distanceEl.nextSibling);
   }
 
   // Добавление стоимости бензина к маршруту
@@ -266,9 +313,24 @@
     const distanceText = getDistanceText(distanceEl);
     const distance = extractDistanceKm(distanceText);
     if (distance === null) return;
+    const tollCost = extractTollCost(getRouteLikeText(routeCard)) || 0;
 
-    const cost = calculateFuelCost(distance, fuelPrice, fuelConsumption);
-    if (cost === null) return;
+    const metrics = calculateRouteMetrics(distance, fuelPrice, fuelConsumption, isRoundTrip, tollCost);
+    if (metrics === null) return;
+    const costPerKmText = formatCostPerKm(metrics.costPerKm);
+    const costLines = buildRouteCostLines(metrics);
+    if (!costLines) return;
+    const costText = formatCost(metrics.cost);
+    const tollCostText = metrics.tollCost > 0 ? `${metrics.tollCost.toLocaleString('ru-RU')} ₽` : '';
+    const litersText = `${metrics.liters.toLocaleString('ru-RU', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })} л`;
+    const tripLabel = isRoundTrip ? ' Туда-обратно.' : '';
+    const tollLabel = metrics.tollCost > 0 ? ` В сумму уже включена платная дорога: ${tollCostText}.` : '';
+    const titleText = metrics.tollCost > 0
+      ? `Бензин: ${formatCost(metrics.fuelCost)}. Итоговая цена маршрута: ${costText}. Внутри уже есть платная дорога: ${tollCostText}.`
+      : `Итоговая цена маршрута ${costText}.`;
 
     // Создаем элемент для отображения стоимости (в стиле платных дорог)
     const costElement = document.createElement('div');
@@ -276,7 +338,12 @@
     // Добавляем data-атрибут для идентификации как элемента расширения (не рекламы)
     costElement.setAttribute('data-extension', 'ymaps-fuel-calc');
     costElement.setAttribute('data-non-ad', 'true');
-    costElement.setAttribute('aria-label', `Стоимость топлива: ${formatCost(cost)}`);
+    costElement.classList.toggle('_split', costLines.split);
+    costElement.setAttribute(
+      'aria-label',
+      `Стоимость маршрута: ${costText}. Бензин: ${formatCost(metrics.fuelCost)}. Расход: ${litersText}. Цена за километр: ${costPerKmText}.${tollLabel}${tripLabel}`
+    );
+    costElement.title = titleText;
     
     // Создаем структуру как у платных дорог: иконка + текст
     costElement.innerHTML = `
@@ -287,25 +354,14 @@
             <path d="M12.85 5h.8c.5 0 .9.4.9.9v2.35c0 .24.1.48.27.65l.42.42c.5.49.76 1.15.76 1.84v2.02a.9.9 0 0 1-1.8 0v-2.1a.78.78 0 0 0-.23-.56l-.5-.49a2 2 0 0 1-.62-1.45V5Z" fill="currentColor"/>
           </svg>
         </span>
-        <span class="fuel-cost-text">${formatCost(cost)}</span>
+        <span class="fuel-cost-body">
+          <span class="fuel-cost-text">${costLines.line1}</span>
+          <span class="fuel-cost-meta">${costLines.line2}</span>
+        </span>
       </span>
     `;
 
-    // Вставляем стоимость рядом с расстоянием (в той же строке)
-    // Ищем родительский элемент, который содержит расстояние
-    const parent = distanceEl.parentElement;
-    if (parent) {
-      // Пытаемся вставить сразу после элемента с расстоянием
-      // Если это inline элемент, вставляем рядом
-      if (distanceEl.nextSibling) {
-        distanceEl.parentNode.insertBefore(costElement, distanceEl.nextSibling);
-      } else {
-        distanceEl.parentNode.appendChild(costElement);
-      }
-    } else {
-      // Fallback: вставляем после элемента
-      distanceEl.parentNode.insertBefore(costElement, distanceEl.nextSibling);
-    }
+    insertFuelCostElement(routeCard, distanceEl, costElement);
   }
 
   function clearRouteCardCost(routeCard) {
@@ -372,10 +428,10 @@
     }, delay);
   }
 
-  function getVisibleAnchorRect(anchor) {
-    if (!anchor || !anchor.isConnected) return null;
+  function getVisibleElementRect(element) {
+    if (!element || !element.isConnected) return null;
 
-    const rect = anchor.getBoundingClientRect();
+    const rect = element.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0 ? rect : null;
   }
 
@@ -388,7 +444,7 @@
     if (!button) return;
 
     const anchor = findSettingsButtonAnchor();
-    const anchorRect = getVisibleAnchorRect(anchor);
+    const anchorRect = getVisibleElementRect(anchor);
 
     if (!anchorRect && lastMissingAnchorUrl !== location.href) {
       lastMissingAnchorUrl = location.href;
@@ -415,11 +471,14 @@
     if (position.mode === 'anchored') {
       button.style.left = `${position.left}px`;
       button.style.right = 'auto';
-      return;
+    } else {
+      button.style.left = 'auto';
+      button.style.right = `${position.right}px`;
     }
 
-    button.style.left = 'auto';
-    button.style.right = `${position.right}px`;
+    if (settingsPanel?.style.display === 'block') {
+      positionSettingsPanel();
+    }
   }
 
   function scheduleButtonPositionUpdate(delay = DEBOUNCE_MS) {
@@ -433,6 +492,34 @@
     }, delay);
   }
 
+  function positionSettingsPanel() {
+    if (!settingsPanel) return;
+
+    const buttonRect = getVisibleElementRect(document.getElementById(SETTINGS_BUTTON_ID));
+    const panelRect = settingsPanel.getBoundingClientRect();
+    const position = resolveSettingsPanelPosition(
+      buttonRect,
+      SETTINGS_PANEL_FALLBACK_RECT,
+      {
+        panelWidth: panelRect.width || SETTINGS_PANEL_DEFAULT_WIDTH,
+        panelHeight: panelRect.height || SETTINGS_PANEL_DEFAULT_HEIGHT,
+        gap: SETTINGS_PANEL_GAP,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }
+    );
+
+    settingsPanel.style.top = `${position.top}px`;
+    if (position.mode === 'anchored') {
+      settingsPanel.style.left = `${position.left}px`;
+      settingsPanel.style.right = 'auto';
+      return;
+    }
+
+    settingsPanel.style.left = 'auto';
+    settingsPanel.style.right = `${position.right}px`;
+  }
+
   function toggleSettingsPanel(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -442,6 +529,7 @@
       panel.style.display = 'block';
       panel.style.visibility = 'visible';
       panel.style.opacity = '1';
+      positionSettingsPanel();
       return;
     }
 
@@ -470,15 +558,22 @@
         <label for="fuel-consumption-input">Расход топлива (л/100км):</label>
         <input type="number" id="fuel-consumption-input" value="${fuelConsumption}" min="0" step="0.1">
       </div>
+      <label class="fuel-cost-checkbox" for="fuel-round-trip-input">
+        <input type="checkbox" id="fuel-round-trip-input" ${isRoundTrip ? 'checked' : ''}>
+        <span>Считать туда-обратно</span>
+      </label>
       <button id="fuel-settings-apply" class="fuel-cost-apply">Применить</button>
       <button id="fuel-settings-toggle" class="fuel-cost-close" aria-label="Закрыть">×</button>
     `;
 
     document.body.appendChild(panel);
+    settingsPanel = panel;
+    positionSettingsPanel();
 
     // Обработчики событий
     const priceInput = panel.querySelector('#fuel-price-input');
     const consumptionInput = panel.querySelector('#fuel-consumption-input');
+    const roundTripInput = panel.querySelector('#fuel-round-trip-input');
     const applyBtn = panel.querySelector('#fuel-settings-apply');
     const toggleBtn = panel.querySelector('#fuel-settings-toggle');
 
@@ -487,13 +582,14 @@
       e.stopPropagation();
       const price = parseFloat(priceInput.value);
       const consumption = parseFloat(consumptionInput.value);
+      const roundTrip = roundTripInput.checked;
       
       if (isNaN(price) || price < 0 || isNaN(consumption) || consumption < 0) {
         alert('Пожалуйста, введите корректные значения');
         return;
       }
       
-      saveSettings(price, consumption);
+      saveSettings(price, consumption, roundTrip);
       panel.style.display = 'none';
     });
 
@@ -523,8 +619,6 @@
         }
       });
     });
-
-    settingsPanel = panel;
     return panel;
   }
 
@@ -625,6 +719,7 @@
       settingsPanel.style.display = 'none';
       settingsPanel.style.visibility = 'visible';
       settingsPanel.style.opacity = '1';
+      positionSettingsPanel();
     }
     
     // Убеждаемся, что кнопка видна и работает
